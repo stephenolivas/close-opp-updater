@@ -45,43 +45,44 @@ def process_opp(opp, label_prefix, log_lines):
     label = opp.get("note") or opp.get("status_label") or opp["id"]
     lead_name = opp.get("lead_name", opp.get("lead_id", "unknown lead"))
     if DRY_RUN:
-        print(f"  → WOULD DELETE | {label_prefix} | {opp['id']} | {label}")
+        print(f"  -> WOULD DELETE | {label_prefix} | {opp['id']} | {label}")
         log_lines.append(f"WOULD DELETE | {label_prefix} | {opp['id']} | {label} | lead: {lead_name}")
         return 1, 0, 0
     else:
         try:
             api_delete(f"/opportunity/{opp['id']}/")
-            print(f"  ✓ DELETED | {label_prefix} | {opp['id']} | {label}")
+            print(f"  OK DELETED | {label_prefix} | {opp['id']} | {label}")
             log_lines.append(f"DELETED | {label_prefix} | {opp['id']} | {label} | lead: {lead_name}")
             time.sleep(0.15)
             return 1, 1, 0
         except Exception as e:
-            print(f"  ✗ ERROR | {opp['id']} | {e}")
+            print(f"  ERROR | {opp['id']} | {e}")
             log_lines.append(f"ERROR | {label_prefix} | {opp['id']} | {e}")
             return 1, 0, 1
 
 
 def pass1_barry_import(log_lines):
-    print(f"\n{'─'*60}")
-    print(f"  PASS 1 — Barry's Import (March 25, 2026)")
-    print(f"  {len(COMPANIES)} companies | {DATE_START} → {DATE_END}")
-    print(f"{'─'*60}\n")
+    print("\n" + "-"*60)
+    print("  PASS 1 - Barry's Import (March 25, 2026)")
+    print("  " + str(len(COMPANIES)) + " companies | " + DATE_START + " to " + DATE_END)
+    print("-"*60 + "\n")
     log_lines.append("=" * 60)
-    log_lines.append("PASS 1 — Barry's Import (March 25 2026)")
+    log_lines.append("PASS 1 - Barry's Import (March 25 2026)")
     log_lines.append("=" * 60)
 
     processed = found = deleted = skipped = errors = 0
 
     for i, company in enumerate(COMPANIES, 1):
-        print(f"[{i}/{len(COMPANIES)}] {company}", end=" ... ", flush=True)
+        print("[" + str(i) + "/" + str(len(COMPANIES)) + "] " + company, end=" ... ", flush=True)
 
         try:
-            res = api_get(f'/lead/?query={requests.utils.quote(f"name:\"{company}\"")}&_limit=3')
+            query = requests.utils.quote('name:"' + company + '"')
+            res = api_get("/lead/?query=" + query + "&_limit=3")
             leads = res.get("data", [])
         except Exception as e:
-            print(f"SEARCH ERROR: {e}")
+            print("SEARCH ERROR: " + str(e))
             errors += 1
-            log_lines.append(f"SEARCH ERROR | {company} | {e}")
+            log_lines.append("SEARCH ERROR | " + company + " | " + str(e))
             time.sleep(0.3)
             continue
 
@@ -94,17 +95,14 @@ def pass1_barry_import(log_lines):
         lead_id = leads[0]["id"]
 
         try:
-            res = api_get(
-                f"/opportunity/?lead_id={lead_id}"
-                f"&date_created__gte={requests.utils.quote(DATE_START)}"
-                f"&date_created__lt={requests.utils.quote(DATE_END)}"
-                f"&_limit=50"
-            )
+            gte = requests.utils.quote(DATE_START)
+            lt  = requests.utils.quote(DATE_END)
+            res = api_get("/opportunity/?lead_id=" + lead_id + "&date_created__gte=" + gte + "&date_created__lt=" + lt + "&_limit=50")
             opps = res.get("data", [])
         except Exception as e:
-            print(f"OPP FETCH ERROR: {e}")
+            print("OPP FETCH ERROR: " + str(e))
             errors += 1
-            log_lines.append(f"OPP FETCH ERROR | {company} | {e}")
+            log_lines.append("OPP FETCH ERROR | " + company + " | " + str(e))
             time.sleep(0.3)
             continue
 
@@ -114,7 +112,7 @@ def pass1_barry_import(log_lines):
             time.sleep(0.1)
             continue
 
-        print(f"{len(opps)} opp(s)")
+        print(str(len(opps)) + " opp(s)")
         for opp in opps:
             f, d, e = process_opp(opp, company, log_lines)
             found += f; deleted += d; errors += e
@@ -122,18 +120,20 @@ def pass1_barry_import(log_lines):
         time.sleep(0.25)
         processed += 1
 
-    print(f"\n  Pass 1 done — {'found' if DRY_RUN else 'deleted'}: {found if DRY_RUN else deleted} | skipped: {skipped} | errors: {errors}")
+    result = "found" if DRY_RUN else "deleted"
+    count  = found if DRY_RUN else deleted
+    print("\n  Pass 1 done - " + result + ": " + str(count) + " | skipped: " + str(skipped) + " | errors: " + str(errors))
     return found, deleted, errors
 
 
 def pass2_stephen_opps(log_lines):
-    print(f"\n{'─'*60}")
-    print(f"  PASS 2 — All opportunities owned by Stephen Olivas")
-    print(f"  No date filter — deletes everything assigned to this user")
-    print(f"{'─'*60}\n")
+    print("\n" + "-"*60)
+    print("  PASS 2 - All opportunities owned by Stephen Olivas")
+    print("  No date filter - deletes everything assigned to this user")
+    print("-"*60 + "\n")
     log_lines.append("")
     log_lines.append("=" * 60)
-    log_lines.append("PASS 2 — All Stephen Olivas Opportunities (no date filter)")
+    log_lines.append("PASS 2 - All Stephen Olivas Opportunities (no date filter)")
     log_lines.append("=" * 60)
 
     found = deleted = errors = 0
@@ -142,22 +142,22 @@ def pass2_stephen_opps(log_lines):
 
     while True:
         try:
-            url = f"/opportunity/?user_id={STEPHEN_USER_ID}&_limit=100"
+            url = "/opportunity/?user_id=" + STEPHEN_USER_ID + "&_limit=100"
             if cursor:
-                url += f"&_cursor={requests.utils.quote(cursor)}"
+                url += "&_cursor=" + requests.utils.quote(cursor)
             res = api_get(url)
         except Exception as e:
-            print(f"  FETCH ERROR (page {page}): {e}")
+            print("  FETCH ERROR (page " + str(page) + "): " + str(e))
             errors += 1
-            log_lines.append(f"FETCH ERROR page {page} | {e}")
+            log_lines.append("FETCH ERROR page " + str(page) + " | " + str(e))
             break
 
         opps = res.get("data", [])
         if not opps:
-            print(f"  No more opportunities found.")
+            print("  No more opportunities found.")
             break
 
-        print(f"  Page {page} — {len(opps)} opportunities")
+        print("  Page " + str(page) + " - " + str(len(opps)) + " opportunities")
         for opp in opps:
             f, d, e = process_opp(opp, "Stephen Olivas", log_lines)
             found += f; deleted += d; errors += e
@@ -169,19 +169,21 @@ def pass2_stephen_opps(log_lines):
         page += 1
         time.sleep(0.3)
 
-    print(f"\n  Pass 2 done — {'found' if DRY_RUN else 'deleted'}: {found if DRY_RUN else deleted} | errors: {errors}")
+    result = "found" if DRY_RUN else "deleted"
+    count  = found if DRY_RUN else deleted
+    print("\n  Pass 2 done - " + result + ": " + str(count) + " | errors: " + str(errors))
     return found, deleted, errors
 
 
 def main():
     mode = "DRY RUN" if DRY_RUN else "LIVE DELETE"
-    print(f"\n{'='*60}")
-    print(f"  {mode} — Modern Amenities Close CRM")
-    print(f"{'='*60}")
+    print("\n" + "="*60)
+    print("  " + mode + " - Modern Amenities Close CRM")
+    print("="*60)
 
     log_lines = [
-        f"Run at: {datetime.now(timezone.utc).isoformat()}",
-        f"Mode: {mode}",
+        "Run at: " + datetime.now(timezone.utc).isoformat(),
+        "Mode: " + mode,
         "",
     ]
 
@@ -192,29 +194,30 @@ def main():
     total_deleted = p1_deleted + p2_deleted
     total_errors  = p1_errors  + p2_errors
 
-    print(f"\n{'='*60}")
-    print(f"  COMPLETE — {mode}")
-    print(f"  Pass 1 (Barry's import):  {'found' if DRY_RUN else 'deleted'} {p1_found if DRY_RUN else p1_deleted}")
-    print(f"  Pass 2 (Stephen's opps):  {'found' if DRY_RUN else 'deleted'} {p2_found if DRY_RUN else p2_deleted}")
-    print(f"  Total:                    {total_found if DRY_RUN else total_deleted}")
-    print(f"  Errors:                   {total_errors}")
-    print(f"{'='*60}\n")
+    result = "found" if DRY_RUN else "deleted"
+    print("\n" + "="*60)
+    print("  COMPLETE - " + mode)
+    print("  Pass 1 (Barry import):   " + result + " " + str(p1_found if DRY_RUN else p1_deleted))
+    print("  Pass 2 (Stephen opps):   " + result + " " + str(p2_found if DRY_RUN else p2_deleted))
+    print("  Total:                   " + str(total_found if DRY_RUN else total_deleted))
+    print("  Errors:                  " + str(total_errors))
+    print("="*60 + "\n")
 
     log_lines += [
         "",
         "=" * 60,
         "SUMMARY",
-        f"Pass 1 (Barry import)  — {'found' if DRY_RUN else 'deleted'}: {p1_found if DRY_RUN else p1_deleted}",
-        f"Pass 2 (Stephen opps)  — {'found' if DRY_RUN else 'deleted'}: {p2_found if DRY_RUN else p2_deleted}",
-        f"Total errors: {total_errors}",
+        "Pass 1 (Barry import)  - " + result + ": " + str(p1_found if DRY_RUN else p1_deleted),
+        "Pass 2 (Stephen opps)  - " + result + ": " + str(p2_found if DRY_RUN else p2_deleted),
+        "Total errors: " + str(total_errors),
     ]
 
     with open(LOG_FILE, "w") as f:
         f.write("\n".join(log_lines))
-    print(f"Log saved to {LOG_FILE}")
+    print("Log saved to " + LOG_FILE)
 
     if total_errors > 0:
-        raise SystemExit(f"{total_errors} error(s) encountered — check log artifact.")
+        raise SystemExit(str(total_errors) + " error(s) encountered - check log artifact.")
 
 
 if __name__ == "__main__":
